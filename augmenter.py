@@ -1,20 +1,26 @@
 #!/usr/bin/python
 
+import os
 import time
-from candidatesreader import NBestList
 import numpy as np
 import codecs
 import argparse
 
-import os
+# Initializing the logging module
 import logging
 import log_utils as L
-from features import *
-
 logger = logging.getLogger(__name__)
 
+from candidatesreader import NBestList
+from features import *
 
 def augment(feature, source_path, input_nbest_path, output_nbest_path):
+    ''' Function to augment the n-best list with a feature function
+     :param feature: The feature function object
+     :param source_path: Path to the original source sentences (maybe required for the feature function)
+     :param input_nbest_path: Path to the n-best file
+     :param output_nbest_path: Path to the output n-best file
+    '''
     # Initialize NBestList objects
     logger.info('Initializing Nbest lists')
     input_nbest = NBestList(input_nbest_path, mode='r')
@@ -38,10 +44,10 @@ def augment(feature, source_path, input_nbest_path, output_nbest_path):
 
 
 parser = argparse.ArgumentParser()	
-parser.add_argument("-s", "--source-sentence-file", dest="source_path", required=True, help="Source sentnece file")
+parser.add_argument("-s", "--source-sentence-file", dest="source_path", required=True, help="Path to the file containing source sentences.")
 parser.add_argument("-i", "--input-nbest", dest="input_nbest_path", required=True, help="Input n-best file")
 parser.add_argument("-o", "--output-nbest", dest="output_nbest_path", required=True, help="Output n-best file")
-parser.add_argument("-f", "--feature", dest="feature_string", required=True, help="feature initializer, e.g. kenlm.LM('LM0','/path/to/lm_file')")
+parser.add_argument("-f", "--feature", dest="feature_string", required=True, help="feature initializer, e.g. LM('LM0','/path/to/lm_file', normalize=True)")
 args = parser.parse_args()
 
 L.set_logger(os.path.abspath(os.path.dirname(args.output_nbest_path)),'augment_log.txt')
