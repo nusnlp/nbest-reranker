@@ -10,8 +10,12 @@ import sys
 sys.path.insert(0, 'lib/kenlm_python/')
 import kenlm
 
-ln10 = math.log(10)
+# Initializing the logging module
+import logging
+import log_utils as L
+logger = logging.getLogger(__name__)
 
+ln10 = math.log(10)
 class LM:
     def __init__(self, feature_name, path, normalize=False):
         self.path = path
@@ -20,7 +24,7 @@ class LM:
         self.model = kenlm.Model(path, c)
         self.name = feature_name
         self.normalize = normalize
-        print >> sys.stderr,  str(self.model.order) + "-gram language model"
+        logger.info('Intialized ' + str(self.model.order) + "-gram language model: " + path)
 
     def get_name(self):
         return self.name
