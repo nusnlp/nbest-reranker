@@ -49,6 +49,9 @@ def b_red(message):
 def blue(message):
     return BColors.BLUE + str(message) + BColors.ENDC
 
+def yellow(message):
+    return BColors.YELLOW + str(message) + BColors.ENDC
+
 def b_yellow(message):
     return BColors.BYELLOW + str(message) + BColors.ENDC
 
