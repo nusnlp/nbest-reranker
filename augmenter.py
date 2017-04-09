@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 from candidatesreader import NBestList
 from features import *
 
-def augment(feature, source_path, input_nbest_path, output_nbest_path):
+def augment(features, source_path, input_nbest_path, output_nbest_path):
     ''' Function to augment the n-best list with a feature function
      :param feature: The feature function object
      :param source_path: Path to the original source sentences (maybe required for the feature function)
@@ -34,13 +34,13 @@ def augment(feature, source_path, input_nbest_path, output_nbest_path):
     sent_count = 0
     for group, src_sent in zip(input_nbest, src_sents):
         for item in group:
-            item.append_feature(feature.get_score(src_sent, item.hyp))
+            for feature in features:
+                item.append_feature(feature.name, feature.get_score(src_sent, item.hyp))
             output_nbest.write(item)
         sent_count += 1
         if (sent_count % 100 == 0):
             logger.info('Augmented ' + L.b_yellow(str(sent_count)) + ' sentences.')
     output_nbest.close()
-    logger.info(L.green('Augmenting done.'))
 
 
 parser = argparse.ArgumentParser()	
@@ -52,5 +52,6 @@ args = parser.parse_args()
 
 L.set_logger(os.path.abspath(os.path.dirname(args.output_nbest_path)),'augment_log.txt')
 L.print_args(args)
-feature = eval(args.feature_string)
-augment(feature, args.source_path, args.input_nbest_path, args.output_nbest_path)
+features = eval('['+args.feature_string+']')
+augment(features, args.source_path, args.input_nbest_path, args.output_nbest_path)
+logger.info(L.green('Augmenting done.'))
