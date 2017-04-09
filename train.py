@@ -20,6 +20,7 @@ parser.add_argument("-r", "--reference-files", dest="ref_paths", required=True, 
 parser.add_argument("-c", "--config", dest="input_config", required=True, help="Input config (ini) file, e.g similar to moses with [weight] section")
 parser.add_argument("-o", "--output-dir", dest="out_dir", required=True, help="Output directory")
 parser.add_argument("-t", "--threads", dest="threads", default = 14, type=int, help="Number of MERT threads")
+parser.add_argument("--no-add-weight", dest="no_add_weight", action="store_true", help="Flag to be true if config file already contains initial weights for augmented feature(s). Useful for adding multiple features.")
 parser.add_argument("-iv", "--init-value", dest="init_value", default = '0.05', help="The initial value of the feature")
 parser.add_argument("-a", "--tuning-algorithm", dest="alg", default = 'mert', help="Tuning Algorithm (mert|pro|wpro)")
 parser.add_argument("-m", "--tuning-metric", dest="metric", default = 'bleu', help="Tuning Algorithm (bleu|m2)")
@@ -67,7 +68,8 @@ with open(args.out_dir + '/init.opt', 'w') as init_opt:
             init_list += tokens[1:]
         except ValueError:
             pass
-    init_list.append(args.init_value)
+    if args.no_add_weight == False:
+        init_list.append(args.init_value)
     dim = len(init_list)
     init_opt.write(' '.join(init_list) + '\n')
     init_opt.write(' '.join(['0' for i in range(dim)]) + '\n')

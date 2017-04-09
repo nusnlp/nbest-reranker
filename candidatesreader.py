@@ -100,8 +100,8 @@ class NBestItem:
             output = output + ' ||| ' + self.word_alignments
         return output
 
-    def append_feature(self, feature):
-        self.features += ' ' + str(feature)
+    def append_feature(self, feature_name, feature_value):
+        self.features += ' ' + str(feature_name) + '= ' + str(feature_value)
 
 
 class NBestGroup:
