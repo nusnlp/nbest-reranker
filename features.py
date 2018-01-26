@@ -19,7 +19,7 @@ import kenlm
 
 
 # For edit operations feature
-from lib.m2scorer_optimized import levenshtein
+from lib.m2scorer import levenshtein
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class LM:
     def get_name(self):
         return self.name
 
-    def get_score(self, source, candidate):
+    def get_score(self, source, candidate, item_idx):
         if self.debpe:
             candidate = candidate.replace('@@ ','')
         lm_score = self.model.score(candidate)
@@ -46,15 +46,14 @@ class LM:
         if self.normalize == True:
             if len(candidate):
                 return (log_scaled * 1.0 ) / len(candidate.split())
-        return str(round(lm_score*ln10,4))
+        return str(round(lm_score*ln10,4)) 
 
 class SAMPLE:
     def __init__(self, name):
         self.name = name
 
-    def get_score(self, source, candidate):
-        return str(0.5)
-
+    def get_score(self, source, candidate, item_idx):
+        return str(0.5) 
 
 class WordPenalty:
     '''
@@ -63,8 +62,8 @@ class WordPenalty:
     def __init__(self, name):
         self.name = name
 
-    def get_score(self, source, candidate):
-        return str(-1 * len(candidate.split()))
+    def get_score(self, source, candidate, item_idx):
+        return str(-1 * len(candidate.split())) 
 
 class EditOps:
     '''
@@ -76,7 +75,7 @@ class EditOps:
         self.ins = ins
         self.subs = subs
 
-    def get_score(self, source, candidate):
+    def get_score(self, source, candidate, item_idx):
         src_tokens = source.split()
         trg_tokens = candidate.split()
         # Get levenshtein matrix
@@ -106,22 +105,190 @@ class EditOps:
             c_idx = edit[0][1]
         scores = ""
         if self.dels:
-            scores += " " + str(d) 
+            scores += str(d) + " "
         if self.ins:
-            scores += " " + str(i) 
+            scores += str(i) + " "
         if self.subs:
-            scores += " " + str(s)
+            scores += str(s) + " "
         return scores
 
 class LexWeights:
     '''
-    Use translation model from SMT p(w_f|w_e) using the alignment model
+    Use translation model from SMT p(w_f|w_e) using the alignment model from NMT
     '''
-    def __init__(self, name, align_file):
+    def __init__(self, name, f2e=None, e2f=None, align_file=None, debpe=False):
 
+        self.name = name
+        if align_file:
+            logger.info("Reading alignment file")
+            self.align_dict = self.prepare_align_dict(align_file, debpe) 
+        self.f2e_dict = None     
+        if f2e:
+            logger.info("Reading lex f2e file: " + f2e)
+            self.f2e_dict =  self.prepare_lex_dict(f2e)
+        self.e2f_dict = None
+        if e2f:
+            logger.info("Reading lex e2f file: " + e2f)
+            self.e2f_dict = self.prepare_lex_dict(e2f)
+
+        #for k in sorted(self.align_dict.iterkeys()):
+            #print k, ":", self.align_dict[k].shape
+
+    def set_align_file(align_file, debpe):
+        logger.info("Reading alignment file")
+        self.align_dict = self.prepare_align_dict(align_file, debpe)
+
+    def prepare_lex_dict(self, lex_file):
+        lex_dict = dict()
+        with open(lex_file) as f:
+            for line in f:
+                pieces = line.strip().split()
+                lex_dict[(pieces[0],pieces[1])] = math.log(float(pieces[2]))
+        return lex_dict    
+
+    def prepare_align_dict(self, align_file, debpe):
+        sent_count = -1
+        item_count = 0
+        align_dict = dict()
+        aligns = []
+        src_sent = ""
+        candidate_sent = ""
+        count = 1
         with open(align_file) as f:
             for line in f:
-                print line.strip()
-    
+                line = line.strip()
+                if not line:
+                    continue
+                pieces = line.split('|||')
+                if len(pieces) > 1:
 
+                    aligns = np.array(aligns)
 
+                    ## Utility function to debpe aligns
+                    def debpe_aligns(aligns, src_sent, candidate_sent):
+                        src_tokens = src_sent.split()
+                        candidate_tokens = candidate_sent.split()
+
+                        # debug
+                        src_debpe_tokens = src_sent.replace('@@ ','').split()
+                        cand_debpe_tokens = candidate_sent.replace('@@ ','').split()
+
+                        #print src_tokens, candidate_tokens, aligns.shape
+                        assert aligns.shape == (len(candidate_tokens)+1, len(src_tokens)+1) or aligns.shape == (len(candidate_tokens), len(src_tokens)+1) , "Mismatch before debpe!" + str(aligns.shape) + " " + src_sent + " ( " + str(len(candidate_tokens)) + " ) " + " CAND:" + candidate_sent
+                        before_shape = aligns.shape
+                        ### Summing up and averaging across rows (candidate tokens) where BPE split occurs
+                        start_idx = -1
+                        end_idx = -1
+                        delete_rows = []
+                        for i in xrange(len(candidate_tokens)):
+                            cand_token = candidate_tokens[i]
+                            if len(cand_token)>=2 and cand_token[-2:] == '@@':
+                                if start_idx == -1:
+                                    start_idx = i
+                                    end_idx = i
+                                else:
+                                    end_idx = i
+                            else:
+                                if start_idx != -1:
+                                    aligns[start_idx] = np.sum(aligns[start_idx:end_idx+2], axis=0) / (end_idx - start_idx + 2)
+                                    delete_rows += range(start_idx+1, end_idx+2)
+                                    start_idx = -1 
+
+                        ### Summing up across columns (src_tokens) where BPE split occurs
+                        start_idx = -1
+                        end_idx = -1
+                        delete_cols = []
+                        for j in xrange(len(src_tokens)):
+                            src_token = src_tokens[j]
+                            if len(src_token) >= 2 and src_token[-2:]== '@@':
+                                if start_idx == -1:
+                                    start_idx = j
+                                    end_idx = j
+                                else:
+                                    end_idx = j
+                            else:
+                                if start_idx != -1:
+                                    aligns[:,start_idx] = np.sum(aligns[:, start_idx:end_idx+2], axis=1)
+                                    delete_cols += range(start_idx+1, end_idx+2)
+                                    start_idx = -1
+
+                        #print aligns.shape, delete_rows, delete_cols
+                        aligns = np.delete(aligns, delete_rows, axis=0)
+                        aligns = np.delete(aligns, delete_cols, axis=1)
+
+                        #print len(src_debpe_tokens), len(cand_debpe_tokens), aligns.shape, before_shape, src_tokens, src_debpe_tokens
+                        #print src_tokens, len(src_tokens)
+                        #print src_debpe_tokens, len(src_debpe_tokens)
+                        #print candidate_tokens, len(candidate_tokens)
+                        #print cand_debpe_tokens, len(cand_debpe_tokens)
+                        #print before_shape, (len(candidate_tokens), len(src_tokens)), aligns.shape, (len(cand_debpe_tokens), len(src_debpe_tokens)) 
+                        assert aligns.shape == (len(cand_debpe_tokens)+1, len(src_debpe_tokens)+1) or aligns.shape == (len(cand_debpe_tokens), len(src_debpe_tokens)+1), "mismatch after debpe!" + str(len(src_debpe_tokens))
+                        return aligns
+
+                    ### End of utility function ##
+
+                    before_shape = aligns.shape
+                    if sent_count>-1 and debpe == True:
+                        aligns = debpe_aligns(aligns, src_sent, candidate_sent)
+                    '''
+                    if sent_count == 167 and item_count == 7:
+                        #print aligns.shape
+                        print "DEBUG"
+                        src_debpe_tokens = src_sent.replace('@@ ','').split()
+                        cand_debpe_tokens = candidate_sent.replace('@@ ','').split()
+                        candidate_tokens = candidate_sent.split()
+                        src_tokens = src_sent.split()
+                        print src_debpe_tokens, len(src_debpe_tokens)
+                        print candidate_tokens, len(candidate_tokens)
+                        print cand_debpe_tokens, len(cand_debpe_tokens)
+                        print before_shape, (len(candidate_tokens), len(src_tokens)), aligns.shape, (len(cand_debpe_tokens), len(src_debpe_tokens)) 
+                    '''
+                    align_dict[(sent_count, item_count)] = aligns
+                    aligns = []
+                    if int(pieces[0]) == sent_count:
+                        item_count += 1
+                    else:
+                        assert sent_count + 1 == int(pieces[0]), "Malformed alignment file!"
+                        sent_count =  sent_count+1
+                        item_count = 0
+                    src_sent = pieces[3]
+                    candidate_sent = pieces[1]
+                else:
+                    weights = [float(piece) for piece in line.split()]
+                    aligns.append(weights)
+
+        aligns = np.array(aligns)
+        if sent_count>-1 and debpe == True:
+            aligns = debpe_aligns(aligns, src_sent, candidate_sent)
+        align_dict[(sent_count, item_count)] = np.array(aligns)
+        return align_dict
+ 
+    def get_score(self, source, candidate, item_idx ):
+        aligns = self.align_dict[item_idx]
+        if (len(candidate.split())+1, len(source.split())+1) != aligns.shape and (len(candidate.split()), len(source.split())+1) != aligns.shape:
+            print source, candidate, aligns.shape, len(source.split()), len(candidate.split())
+        assert (len(candidate.split())+1, len(source.split())+1) == aligns.shape or (len(candidate.split()), len(source.split())+1) == aligns.shape, "Alignment dimension mismatch at: " + str(item_idx)
+        candidate_tokens = candidate.split()
+        source_tokens = source.split()
+        f2e_score = 0.0     
+        e2f_score = 0.0
+        for i in xrange(len(candidate_tokens)):
+            for j in xrange(len(source_tokens)):
+                #print "CANDIDATE_TOKEN:", candidate_tokens[i], "SOURCE_TOKEN:", source_tokens[j], "PROB:", self.f2e_dict[(candidate_tokens[i], source_tokens[j])], "ALIGN:", aligns[i,j]
+                if self.f2e_dict:
+                    if (candidate_tokens[i], source_tokens[j]) in self.f2e_dict:
+                        f2e_score += self.f2e_dict[(candidate_tokens[i], source_tokens[j])]*aligns[i,j]
+                    else:
+                        f2e_score += math.log(0.0000001)*aligns[i,j]
+                if self.e2f_dict:
+                    if (source_tokens[j], candidate_tokens[i]) in self.e2f_dict:
+                        e2f_score += self.e2f_dict[(source_tokens[j], candidate_tokens[i])]*aligns[i,j]
+                    else:
+                        e2f_score += math.log(0.0000001)*aligns[i,j]
+        scores = ""
+        if self.f2e_dict:
+            scores += str(f2e_score) + " "
+        if self.e2f_dict:
+            scores += str(e2f_score) + " "
+
+        return scores
