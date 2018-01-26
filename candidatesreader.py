@@ -101,7 +101,7 @@ class NBestItem:
         return output
 
     def append_feature(self, feature_name, feature_value):
-        self.features += ' ' + str(feature_name) + '= ' + str(feature_value)
+        self.features += ' ' + str(feature_name) + '= ' + str(feature_value) + ' '
 
 
 class NBestGroup:
