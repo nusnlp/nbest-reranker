@@ -33,10 +33,12 @@ def augment(features, source_path, input_nbest_path, output_nbest_path):
     # For each of the item in the n-best list, append the feature
     sent_count = 0
     for group, src_sent in zip(input_nbest, src_sents):
+        candidate_count = 0
         for item in group:
             for feature in features:
-                item.append_feature(feature.name, feature.get_score(src_sent, item.hyp))
+                item.append_feature(feature.name, feature.get_score(src_sent, item.hyp, (sent_count, candidate_count)))
             output_nbest.write(item)
+            candidate_count += 1
         sent_count += 1
         if (sent_count % 100 == 0):
             logger.info('Augmented ' + L.b_yellow(str(sent_count)) + ' sentences.')
