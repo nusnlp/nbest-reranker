@@ -19,7 +19,7 @@ import kenlm
 
 
 # For edit operations feature
-from lib.m2scorer import levenshtein
+from lib import levenshtein
 
 logger = logging.getLogger(__name__)
 
